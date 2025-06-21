@@ -17,21 +17,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const getSession = async () => {
+    const getUser = async () => {
       try {
-        const { data, error } = await supabase.auth.getSession();
+        const { data, error } = await supabase.auth.getUser();
         if (error) {
-          console.error('Error fetching session:', error.message);
+          console.error('Error fetching user:', error.message);
         }
-        setUser(data?.session?.user ?? null);
+        setUser(data?.user ?? null);
       } catch (err) {
-        console.error('Unexpected error fetching session:', err);
+        console.error('Unexpected error fetching user:', err);
       } finally {
         setLoading(false);
       }
     };
 
-    getSession();
+    getUser();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       console.log('Auth state changed:', _event);

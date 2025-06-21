@@ -8,6 +8,7 @@ import SessionPage from "./pages/Session";
 import SessionDetail from "./pages/SessionDetails";
 import Profile from "./pages/Profile";
 import ProtectedRoute from "./components/ProtectedRoute";
+import LyricsModal from "./components/LyricsModal";
 
 function App() {
   return (
@@ -70,6 +71,20 @@ function App() {
           element={
             <ProtectedRoute>
               <Profile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/lyrics"
+          element={
+            <ProtectedRoute>
+              <LyricsModal
+                isOpen={true}
+                onClose={() => {}}
+                title=""
+                artist=""
+                lyrics=""
+              />
             </ProtectedRoute>
           }
         />

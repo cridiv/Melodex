@@ -1,47 +1,81 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Edit3, Save, Lock } from 'lucide-react';
 import { FaSpotify } from 'react-icons/fa';
 import NavBarM from './NavBarM';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabaseClient';
 
 const Profile = () => {
+  const { user: supabaseUser } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
+
   const [user, setUser] = useState({
-    username: 'audiophile42',
-    fullName: 'Alex Chen',
-    email: 'alex@melodex.com',
+    username: '',
+    fullName: '',
+    email: '',
     country: 'United States',
-    dob: '1990-05-15',
-    gender: 'Male',
+    dob: '',
+    gender: '',
     spotifyConnected: false
   });
+
+  // Populate state when supabaseUser is loaded
+  useEffect(() => {
+    if (supabaseUser) {
+      setUser({
+        username: supabaseUser.user_metadata?.username || '',
+        fullName: supabaseUser.user_metadata?.full_name || '',
+        email: supabaseUser.email || '',
+        country: supabaseUser.user_metadata?.country || 'United States',
+        dob: supabaseUser.user_metadata?.dob || '',
+        gender: supabaseUser.user_metadata?.gender || '',
+        spotifyConnected: false
+      });
+    }
+  }, [supabaseUser]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setUser(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsEditing(false);
-    // Add API save logic here
+
+    // Save updated user_metadata to Supabase
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        username: user.username,
+        full_name: user.fullName,
+        country: user.country,
+        dob: user.dob,
+        gender: user.gender
+      }
+    });
+
+    if (error) {
+      console.error('Error updating user profile:', error.message);
+    } else {
+      console.log('Profile updated');
+    }
   };
 
   return (
-    
     <div className="min-h-screen bg-black text-white p-6 relative">
-        <NavBarM />
+      <NavBarM />
+
       {/* Noise texture */}
-      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiPjxkZWZzPjxwYXR0ZXJuIGlkPSJwYXR0ZXJuIiB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHBhdHRlcm5Vbml0cz0idXNlclNwYWNlT25Vc2UiIHBhdHRlcm5UcmFuc2Zvcm09InJvdGF0ZSg0NSkiPjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wMykiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjcGF0dGVybikiLz48L3N2Zz4=')] opacity-20 pointer-events-none"></div>
-      
+     {/* <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2Zy...')] opacity-20 pointer-events-none"></div> */}
+
       {/* Main container */}
       <div className="max-w-md mx-auto bg-gray-900/50 backdrop-blur-xl rounded-3xl border border-gray-800/50 shadow-xl p-8 relative z-10">
-        {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-2xl font-bold bg-gradient-to-r from-white to-indigo-300 bg-clip-text text-transparent">
             Profile Settings
           </h1>
           <button
-            onClick={() => isEditing ? handleSubmit : setIsEditing(!isEditing)}
+            onClick={isEditing ? handleSubmit : () => setIsEditing(true)}
             className="flex items-center gap-2 px-4 py-2 bg-[#3b19e6] hover:bg-indigo-600/20 border border-indigo-600/50 rounded-full text-indigo-400 transition-all"
           >
             {isEditing ? (
@@ -59,74 +93,20 @@ const Profile = () => {
         </div>
 
         {/* Avatar */}
-        <div className="flex justify-center mb-8">
-          <label className="relative group cursor-pointer">
-            <div className="absolute inset-0 bg-indigo-600/30 rounded-full blur-md group-hover:blur-lg transition-all animate-pulse"></div>
-            <img 
-              src="https://i.pravatar.cc/150?img=5" 
-              alt="Avatar" 
-              className="w-24 h-24 rounded-full border-2 border-indigo-600/80 relative z-10"
-            />
-            <input type="file" className="hidden" />
-          </label>
-        </div>
+<img 
+  src={`https://api.dicebear.com/7.x/lorelei/svg?seed=${user.username || user.email}`} 
+  alt="Avatar" 
+  className="w-24 h-24 rounded-full border-2 border-indigo-600/80 relative z-10"
+/>
 
-        {/* Form */}
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             {/* Username */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Username</label>
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="username"
-                  value={user.username}
-                  onChange={handleChange}
-                  className="w-full bg-gray-900/30 border border-gray-700 rounded-lg px-4 py-2 focus:border-indigo-500 focus:outline-none"
-                />
-              ) : (
-                <div className="px-4 py-2 bg-gray-900/30 rounded-lg border border-transparent">
-                  {user.username}
-                </div>
-              )}
-            </div>
-
+            <InputField label="Username" name="username" value={user.username} onChange={handleChange} isEditing={isEditing} />
             {/* Full Name */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Full Name</label>
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="fullName"
-                  value={user.fullName}
-                  onChange={handleChange}
-                  className="w-full bg-gray-900/30 border border-gray-700 rounded-lg px-4 py-2 focus:border-indigo-500 focus:outline-none"
-                />
-              ) : (
-                <div className="px-4 py-2 bg-gray-900/30 rounded-lg border border-transparent">
-                  {user.fullName}
-                </div>
-              )}
-            </div>
-
-            {/* Email */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Email</label>
-              {isEditing ? (
-                <input
-                  type="email"
-                  name="email"
-                  value={user.email}
-                  onChange={handleChange}
-                  className="w-full bg-gray-900/30 border border-gray-700 rounded-lg px-4 py-2 focus:border-indigo-500 focus:outline-none"
-                />
-              ) : (
-                <div className="px-4 py-2 bg-gray-900/30 rounded-lg border border-transparent">
-                  {user.email}
-                </div>
-              )}
-            </div>
+            <InputField label="Full Name" name="fullName" value={user.fullName} onChange={handleChange} isEditing={isEditing} />
+            {/* Email (readonly) */}
+            <InputField label="Email" name="email" value={user.email} isEditing={false} />
 
             {/* Country */}
             <div>
@@ -141,32 +121,22 @@ const Profile = () => {
                   <option value="United States">United States</option>
                   <option value="United Kingdom">United Kingdom</option>
                   <option value="Canada">Canada</option>
-                  {/* Add more countries */}
                 </select>
               ) : (
-                <div className="px-4 py-2 bg-gray-900/30 rounded-lg border border-transparent">
-                  {user.country}
-                </div>
+                <DisplayValue value={user.country} />
               )}
             </div>
 
             {/* Date of Birth */}
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Date of Birth</label>
-              {isEditing ? (
-                <input
-                  type="date"
-                  name="dob"
-                  value={user.dob}
-                  onChange={handleChange}
-                  className="w-full bg-gray-900/30 border border-gray-700 rounded-lg px-4 py-2 focus:border-indigo-500 focus:outline-none"
-                />
-              ) : (
-                <div className="px-4 py-2 bg-gray-900/30 rounded-lg border border-transparent">
-                  {new Date(user.dob).toLocaleDateString()}
-                </div>
-              )}
-            </div>
+            <InputField
+              label="Date of Birth"
+              name="dob"
+              type="date"
+              value={user.dob}
+              onChange={handleChange}
+              isEditing={isEditing}
+              displayValue={user.dob ? new Date(user.dob).toLocaleDateString() : ''}
+            />
 
             {/* Gender */}
             <div>
@@ -184,13 +154,11 @@ const Profile = () => {
                   <option value="Prefer not to say">Prefer not to say</option>
                 </select>
               ) : (
-                <div className="px-4 py-2 bg-gray-900/30 rounded-lg border border-transparent">
-                  {user.gender}
-                </div>
+                <DisplayValue value={user.gender} />
               )}
             </div>
 
-            {/* Password */}
+            {/* Password (static) */}
             <div>
               <label className="block text-sm text-gray-400 mb-1 flex items-center gap-2">
                 <Lock className="w-4 h-4" /> Password
@@ -203,7 +171,7 @@ const Profile = () => {
               </button>
             </div>
 
-            {/* Spotify Connection */}
+            {/* Spotify */}
             <div className="pt-4">
               <button
                 type="button"
@@ -223,5 +191,46 @@ const Profile = () => {
     </div>
   );
 };
+
+// Reusable Input Field
+const InputField = ({
+  label,
+  name,
+  value,
+  onChange,
+  isEditing,
+  type = 'text',
+  displayValue
+}: {
+  label: string;
+  name: string;
+  value: string;
+  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  isEditing: boolean;
+  type?: string;
+  displayValue?: string;
+}) => (
+  <div>
+    <label className="block text-sm text-gray-400 mb-1">{label}</label>
+    {isEditing && onChange ? (
+      <input
+        type={type}
+        name={name}
+        value={value}
+        onChange={onChange}
+        className="w-full bg-gray-900/30 border border-gray-700 rounded-lg px-4 py-2 focus:border-indigo-500 focus:outline-none"
+      />
+    ) : (
+      <DisplayValue value={displayValue || value} />
+    )}
+  </div>
+);
+
+// Reusable display block
+const DisplayValue = ({ value }: { value: string }) => (
+  <div className="px-4 py-2 bg-gray-900/30 rounded-lg border border-transparent">
+    {value || <span className="text-gray-400 italic">Not set</span>}
+  </div>
+);
 
 export default Profile;

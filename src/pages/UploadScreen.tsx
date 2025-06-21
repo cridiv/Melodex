@@ -2,15 +2,44 @@ import React, { useState } from 'react';
 import { X, Link, Music, Video, FileText } from 'lucide-react';
 import NavBarM from './NavBarM';
 import { supabase } from '../lib/supabaseClient';
+import MetaDataPopup from '../components/MetaDataPopup';
+import SessionPicker from '../components/SessionPicker';
+import TrackModalManager from '../components/TrackModalManager';
+
+
+interface TrackMetadata {
+  title: string;
+  artist: string;
+  album: string;
+  duration?: number;
+  genre: string;
+  image: string;
+  fileUrl: string;
+  fileType: string;
+}
 
 const UploadScreen = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showMetadataPopup, setShowMetadataPopup] = useState(false);
+  const [showSessionPicker, setShowSessionPicker] = useState(false);
   const [dragOver, setDragOver] = useState<string | null>(null);
   const [link, setLink] = useState('');
   const [audioFiles, setAudioFiles] = useState<File[]>([]);
   const [videoFiles, setVideoFiles] = useState<File[]>([]);
   const [activeInput, setActiveInput] = useState<'link' | 'audio' | 'video' | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [isReadyToUpload, setIsReadyToUpload] = useState(false);
+  const [metadata, setMetadata] = useState<TrackMetadata>({
+    title: '',
+    artist: '',
+    album: '',
+    duration: undefined,
+    genre: '',
+    image: '',
+    fileUrl: '',
+    fileType: '',
+  });
+
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
   const handleDragOver = (e: React.DragEvent, type: string) => {
     e.preventDefault();
@@ -36,47 +65,135 @@ const UploadScreen = () => {
     setIsReadyToUpload(true);
   };
 
- const handleUpload = async () => {
-  const formData = new FormData();
+  const handleUpload = async () => {
+    const formData = new FormData();
+    const fileToUpload = audioFiles[0] || videoFiles[0];
+    if (!fileToUpload) return alert('Please select a file');
 
-  const fileToUpload = audioFiles[0] || videoFiles[0]; // only one at a time
-  if (!fileToUpload) return alert('Please select a file');
+    formData.append('file', fileToUpload);
 
-  formData.append('file', fileToUpload);
+    try {
+      setIsUploading(true);
+
+      const sessionResult = await supabase.auth.getSession();
+      const accessToken = sessionResult.data.session?.access_token;
+      const userId = sessionResult.data.session?.user?.id;
+
+      if (!userId) throw new Error('User not authenticated');
+
+      formData.append('userId', userId);
+
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/tracks/upload`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: formData,
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) throw new Error(result.message || 'Upload failed');
+
+      console.log('✅ Upload Success:', result);
+      handleUploadResponse(result);
+    } catch (err) {
+      console.error('❌ Upload error:', err);
+      alert('Error uploading file');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+const handleUploadResponse = (responseData: any) => {
+  const data = responseData.metadata;
+  setMetadata({
+    title: data.title || '',
+    artist: data.artist || '',
+    album: data.album || '',
+    duration: data.duration ? Number(data.duration) : undefined,
+    genre: data.genre || '',
+    image: data.albumArt || '',
+    fileUrl: data.fileUrl || '',
+    fileType: data.fileType || '',
+  });
+  setShowMetadataPopup(true);
+};
+
+
+  const handleLinkUpload = async () => {
+  if (!link) return alert('Please enter a link');
 
   try {
+    setIsUploading(true);
+
     const sessionResult = await supabase.auth.getSession();
     const accessToken = sessionResult.data.session?.access_token;
     const userId = sessionResult.data.session?.user?.id;
 
-    if (!userId) {
-      throw new Error('User not authenticated');
-    }
+    if (!userId) throw new Error('User not authenticated');
 
-    formData.append('userId', userId);
-
-    const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/tracks/upload`, {
+    const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/tracks/upload-link`, {
       method: 'POST',
       headers: {
+        'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
       },
-      body: formData,
+      body: JSON.stringify({ link, userId }),
     });
 
     const result = await res.json();
+    if (!res.ok) throw new Error(result.message || 'Upload failed');
 
-    if (!res.ok) {
-      throw new Error(result.message || 'Upload failed');
-    }
-
-    console.log('✅ Upload Success:', result);
-    alert('Upload successful!');
-    clearUploads();
+    console.log('✅ Link upload success:', result);
+    handleUploadResponse(result);
   } catch (err) {
-    console.error('❌ Upload error:', err);
-    alert('Error uploading file');
+    console.error('❌ Link upload error:', err);
+    alert('Error uploading from link');
+  } finally {
+    setIsUploading(false);
   }
 };
+
+  const saveToSession = async (sessionId: string) => {
+    try {
+      const sessionResult = await supabase.auth.getSession();
+      const accessToken = sessionResult.data.session?.access_token;
+      const userId = sessionResult.data.session?.user?.id;
+      if (!userId || !metadata.fileUrl) throw new Error('Missing data');
+
+      const payload = {
+        sessionId,
+        userId: userId,
+        title: metadata.title,
+        artist: metadata.artist,
+        album: metadata.album,
+        duration: metadata.duration,
+        genre: metadata.genre,
+        image: metadata.image,
+        fileUrl: metadata.fileUrl,
+        fileType: metadata.fileType,
+      };
+
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/tracks/save-to-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message || 'Save failed');
+
+      alert('Track saved to session successfully!');
+      setShowSessionPicker(false);
+    } catch (err) {
+      console.error('❌ Save error:', err);
+      alert('Failed to save to session');
+    }
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, type: 'audio' | 'video') => {
     const files = e.target.files ? Array.from(e.target.files) : [];
@@ -101,7 +218,6 @@ const UploadScreen = () => {
     setVideoFiles([]);
     setActiveInput(null);
     setIsReadyToUpload(false);
-
     const fileInputs = document.querySelectorAll('input[type="file"]') as NodeListOf<HTMLInputElement>;
     fileInputs.forEach(input => input.value = '');
   };
@@ -109,6 +225,10 @@ const UploadScreen = () => {
   const isLinkDisabled = activeInput && activeInput !== 'link';
   const isAudioDisabled = activeInput && activeInput !== 'audio';
   const isVideoDisabled = activeInput && activeInput !== 'video';
+
+  const Spinner = () => (
+    <span className="ml-2 animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+  );
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -134,152 +254,172 @@ const UploadScreen = () => {
           </div>
         )}
 
-        <div className="space-y-6">
+        {/* Link Upload */}
+<div className="space-y-3">
+  <h3 className="text-lg font-bold flex items-center space-x-2">
+    <Link className="w-5 h-5" />
+    <span>Upload from Links</span>
+  </h3>
+  <div className={`p-6 rounded-xl border-2 border-dashed border-gray-600 hover:border-blue-500 transition-all duration-300 ${isLinkDisabled ? 'opacity-50 pointer-events-none' : ''}`} style={{ backgroundColor: '#1a1a1a' }}>
+    <div className="text-center space-y-4">
+      <div className="w-16 h-16 mx-auto bg-blue-500/20 rounded-full flex items-center justify-center">
+        <Link className="w-8 h-8 text-blue-400" />
+      </div>
+      <div>
+        <h4 className="font-semibold text-white mb-2">Paste your link</h4>
+        <p className="text-gray-400 text-sm mb-4">Support for YouTube, SoundCloud, Spotify, and more</p>
+        <input
+          type="url"
+          placeholder="https://example.com/your-link"
+          className="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 transition-colors"
+          value={link}
+          onChange={handleLinkChange}
+          disabled={!!isLinkDisabled}
+        />
+        <button
+          onClick={handleLinkUpload}
+          disabled={!link || isUploading}
+          className={`w-full mt-3 p-3 rounded-lg font-semibold transition-all duration-200 hover:scale-[0.98] flex justify-center items-center ${!link ? 'opacity-50 cursor-not-allowed' : ''}`}
+          style={{ backgroundColor: '#3b19e6' }}
+        >
+          {isUploading ? <>Uploading Link <Spinner /></> : 'Upload from Link'}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
-          {/* Link Upload */}
-          <div className="space-y-3">
-            <h3 className="text-lg font-bold flex items-center space-x-2">
-              <Link className="w-5 h-5" />
-              <span>Upload from Links</span>
-            </h3>
-            <div className={`p-6 rounded-xl border-2 border-dashed border-gray-600 hover:border-blue-500 transition-all duration-300 ${isLinkDisabled ? 'opacity-50 pointer-events-none' : ''}`} style={{ backgroundColor: '#1a1a1a' }}>
-              <div className="text-center space-y-4">
-                <div className="w-16 h-16 mx-auto bg-blue-500/20 rounded-full flex items-center justify-center">
-                  <Link className="w-8 h-8 text-blue-400" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-white mb-2">Paste your link</h4>
-                  <p className="text-gray-400 text-sm mb-4">Support for YouTube, SoundCloud, Spotify, and more</p>
-                  <input
-                    type="url"
-                    placeholder="https://example.com/your-link"
-                    className="w-full p-3 rounded-lg bg-gray-800 border border-gray-600 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 transition-colors"
-                    value={link}
-                    onChange={handleLinkChange}
-                    disabled={!!isLinkDisabled}
-                  />
+
+        {/* Audio Upload */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-bold flex items-center space-x-2">
+            <Music className="w-5 h-5" />
+            <span>Upload Audio Files</span>
+          </h3>
+          <div
+            className={`p-6 rounded-xl border-2 border-dashed transition-all duration-300 ${dragOver === 'audio' ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600 hover:border-blue-500'} ${isAudioDisabled ? 'opacity-50 pointer-events-none' : ''}`}
+            style={{ backgroundColor: dragOver === 'audio' ? undefined : '#1a1a1a' }}
+            onDragOver={(e) => !isAudioDisabled && handleDragOver(e, 'audio')}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => !isAudioDisabled && handleDrop(e, 'audio')}
+          >
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 mx-auto bg-blue-500/20 rounded-full flex items-center justify-center">
+                <Music className="w-8 h-8 text-blue-400" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-white mb-2">
+                  {audioFiles.length > 0 ? `${audioFiles.length} file(s) selected` : 'Drop audio files here'}
+                </h4>
+                <p className="text-gray-400 text-sm mb-4">or click to browse</p>
+                <input
+                  type="file"
+                  multiple
+                  accept="audio/*"
+                  onChange={(e) => handleFileSelect(e, 'audio')}
+                  className="hidden"
+                  id="audio-upload"
+                  disabled={!!isAudioDisabled}
+                />
+                {audioFiles.length > 0 && isReadyToUpload ? (
                   <button
-                    className={`w-full mt-3 p-3 rounded-lg font-semibold transition-all duration-200 hover:scale-[0.98] ${!link ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    style={{ backgroundColor: '#3b19e6' }}
-                    disabled={!link}
+                    onClick={handleUpload}
+                    disabled={isUploading}
+                    className="w-full p-3 rounded-lg font-semibold bg-green-600 hover:bg-green-700 transition-all flex justify-center items-center"
                   >
-                    Upload from Link
+                    {isUploading ? <>Uploading... <Spinner /></> : 'Upload Audio'}
                   </button>
-                </div>
+                ) : (
+                  <label
+                    htmlFor="audio-upload"
+                    className={`inline-block w-full p-3 rounded-lg font-semibold transition-all duration-200 hover:scale-[0.98] cursor-pointer ${isAudioDisabled ? 'cursor-not-allowed' : ''}`}
+                    style={{ backgroundColor: '#3b19e6' }}
+                  >
+                    {audioFiles.length > 0 ? 'Change Audio Files' : 'Choose Audio Files'}
+                  </label>
+                )}
               </div>
-            </div>
-          </div>
-
-          {/* Audio Upload */}
-          <div className="space-y-3">
-            <h3 className="text-lg font-bold flex items-center space-x-2">
-              <Music className="w-5 h-5" />
-              <span>Upload Audio Files</span>
-            </h3>
-            <div
-              className={`p-6 rounded-xl border-2 border-dashed transition-all duration-300 ${dragOver === 'audio' ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600 hover:border-blue-500'} ${isAudioDisabled ? 'opacity-50 pointer-events-none' : ''}`}
-              style={{ backgroundColor: dragOver === 'audio' ? undefined : '#1a1a1a' }}
-              onDragOver={(e) => !isAudioDisabled && handleDragOver(e, 'audio')}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => !isAudioDisabled && handleDrop(e, 'audio')}
-            >
-              <div className="text-center space-y-4">
-                <div className="w-16 h-16 mx-auto bg-blue-500/20 rounded-full flex items-center justify-center">
-                  <Music className="w-8 h-8 text-blue-400" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-white mb-2">
-                    {audioFiles.length > 0 ? `${audioFiles.length} file(s) selected` : 'Drop audio files here'}
-                  </h4>
-                  <p className="text-gray-400 text-sm mb-4">or click to browse</p>
-                  <input
-                    type="file"
-                    multiple
-                    accept="audio/*"
-                    onChange={(e) => handleFileSelect(e, 'audio')}
-                    className="hidden"
-                    id="audio-upload"
-                    disabled={!!isAudioDisabled}
-                  />
-                  {audioFiles.length > 0 && isReadyToUpload ? (
-                    <button
-                      onClick={handleUpload}
-                      className="w-full p-3 rounded-lg font-semibold bg-green-600 hover:bg-green-700 transition-all"
-                    >
-                      Upload Audio
-                    </button>
-                  ) : (
-                    <label
-                      htmlFor="audio-upload"
-                      className={`inline-block w-full p-3 rounded-lg font-semibold transition-all duration-200 hover:scale-[0.98] cursor-pointer ${isAudioDisabled ? 'cursor-not-allowed' : ''}`}
-                      style={{ backgroundColor: '#3b19e6' }}
-                    >
-                      {audioFiles.length > 0 ? 'Change Audio Files' : 'Choose Audio Files'}
-                    </label>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-500">Supported formats: MP3, WAV, FLAC, AAC, OGG, M4A</p>
-            </div>
-          </div>
-
-          {/* Video Upload */}
-          <div className="space-y-3">
-            <h3 className="text-lg font-bold flex items-center space-x-2">
-              <Video className="w-5 h-5" />
-              <span>Upload Video Files</span>
-            </h3>
-            <div
-              className={`p-6 rounded-xl border-2 border-dashed transition-all duration-300 ${dragOver === 'video' ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600 hover:border-blue-500'} ${isVideoDisabled ? 'opacity-50 pointer-events-none' : ''}`}
-              style={{ backgroundColor: dragOver === 'video' ? undefined : '#1a1a1a' }}
-              onDragOver={(e) => !isVideoDisabled && handleDragOver(e, 'video')}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => !isVideoDisabled && handleDrop(e, 'video')}
-            >
-              <div className="text-center space-y-4">
-                <div className="w-16 h-16 mx-auto bg-blue-500/20 rounded-full flex items-center justify-center">
-                  <Video className="w-8 h-8 text-blue-400" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-white mb-2">
-                    {videoFiles.length > 0 ? `${videoFiles.length} file(s) selected` : 'Drop video files here'}
-                  </h4>
-                  <p className="text-gray-400 text-sm mb-4">or click to browse</p>
-                  <input
-                    type="file"
-                    multiple
-                    accept="video/*"
-                    onChange={(e) => handleFileSelect(e, 'video')}
-                    className="hidden"
-                    id="video-upload"
-                    disabled={!!isVideoDisabled}
-                  />
-                  {videoFiles.length > 0 && isReadyToUpload ? (
-                    <button
-                      onClick={handleUpload}
-                      className="w-full p-3 rounded-lg font-semibold bg-green-600 hover:bg-green-700 transition-all"
-                    >
-                      Upload Video
-                    </button>
-                  ) : (
-                    <label
-                      htmlFor="video-upload"
-                      className={`inline-block w-full p-3 rounded-lg font-semibold transition-all duration-200 hover:scale-[0.98] cursor-pointer ${isVideoDisabled ? 'cursor-not-allowed' : ''}`}
-                      style={{ backgroundColor: '#3b19e6' }}
-                    >
-                      {videoFiles.length > 0 ? 'Change Video Files' : 'Choose Video Files'}
-                    </label>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div className="text-center">
-              <p className="text-xs text-gray-500">Supported formats: MP4, AVI, MOV, MKV, WMV, FLV, WEBM</p>
             </div>
           </div>
         </div>
+
+        {/* Video Upload */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-bold flex items-center space-x-2">
+            <Video className="w-5 h-5" />
+            <span>Upload Video Files</span>
+          </h3>
+          <div
+            className={`p-6 rounded-xl border-2 border-dashed transition-all duration-300 ${dragOver === 'video' ? 'border-blue-500 bg-blue-500/10' : 'border-gray-600 hover:border-blue-500'} ${isVideoDisabled ? 'opacity-50 pointer-events-none' : ''}`}
+            style={{ backgroundColor: dragOver === 'video' ? undefined : '#1a1a1a' }}
+            onDragOver={(e) => !isVideoDisabled && handleDragOver(e, 'video')}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => !isVideoDisabled && handleDrop(e, 'video')}
+          >
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 mx-auto bg-blue-500/20 rounded-full flex items-center justify-center">
+                <Video className="w-8 h-8 text-blue-400" />
+              </div>
+              <div>
+                <h4 className="font-semibold text-white mb-2">
+                  {videoFiles.length > 0 ? `${videoFiles.length} file(s) selected` : 'Drop video files here'}
+                </h4>
+                <p className="text-gray-400 text-sm mb-4">or click to browse</p>
+                <input
+                  type="file"
+                  multiple
+                  accept="video/*"
+                  onChange={(e) => handleFileSelect(e, 'video')}
+                  className="hidden"
+                  id="video-upload"
+                  disabled={!!isVideoDisabled}
+                />
+                {videoFiles.length > 0 && isReadyToUpload ? (
+                  <button
+                    onClick={handleUpload}
+                    disabled={isUploading}
+                    className="w-full p-3 rounded-lg font-semibold bg-green-600 hover:bg-green-700 transition-all flex justify-center items-center"
+                  >
+                    {isUploading ? <>Uploading... <Spinner /></> : 'Upload Video'}
+                  </button>
+                ) : (
+                  <label
+                    htmlFor="video-upload"
+                    className={`inline-block w-full p-3 rounded-lg font-semibold transition-all duration-200 hover:scale-[0.98] cursor-pointer ${isVideoDisabled ? 'cursor-not-allowed' : ''}`}
+                    style={{ backgroundColor: '#3b19e6' }}
+                  >
+                    {videoFiles.length > 0 ? 'Change Video Files' : 'Choose Video Files'}
+                  </label>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+{showMetadataPopup && metadata.title && (
+  <MetaDataPopup
+    isOpen={true}
+    isLoading={isUploading}
+    metadata={metadata}
+    onClose={() => setShowMetadataPopup(false)}
+    onSave={() => {
+      setShowMetadataPopup(false);
+      setShowSessionPicker(true);
+    }}
+  />
+)}
+
+
+        <TrackModalManager />
+
+        <SessionPicker
+          isOpen={showSessionPicker}
+          onClose={() => setShowSessionPicker(false)}
+          onSelectSession={(sessionId: string) => {
+            setSelectedSessionId(sessionId);
+            saveToSession(sessionId);
+          }}
+        />
 
         <div className="mt-8 p-4 rounded-xl border border-gray-800" style={{ backgroundColor: '#1a1a1a' }}>
           <h4 className="font-semibold text-white mb-3 flex items-center space-x-2">
