@@ -267,7 +267,7 @@ const handleUploadResponse = (responseData: any) => {
       </div>
       <div>
         <h4 className="font-semibold text-white mb-2">Paste your link</h4>
-        <p className="text-gray-400 text-sm mb-4">Support for YouTube, SoundCloud, Spotify, and more</p>
+        <p className="text-gray-400 text-sm mb-4">Support for YouTube, SoundCloud, TikTok, and more</p>
         <input
           type="url"
           placeholder="https://example.com/your-link"
@@ -426,8 +426,8 @@ const handleUploadResponse = (responseData: any) => {
             <span>Upload Tips</span>
           </h4>
           <ul className="space-y-2 text-sm text-gray-400">
-            <li>• Maximum file size: 100MB per file</li>
-            <li>• You can upload multiple files at once</li>
+            <li>• Maximum file size: 20MB per file</li>
+            <li>• You can only upload one file at a time</li>
             <li>• Processing time depends on file size and format</li>
             <li>• Links are processed instantly if the source is accessible</li>
           </ul>

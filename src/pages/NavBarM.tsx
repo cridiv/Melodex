@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import NotificationModal from '../components/NotificationModal';
+
 
 interface SidebarItem {
   id: string;
@@ -22,7 +24,8 @@ interface SidebarItem {
 
 const NavBarM = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { user: supabaseUser } = useAuth(); // ✅ Real user from context
+  const { user: supabaseUser } = useAuth();
+  const [isNotifOpen, setNotifOpen] = useState(false);
 
   const sidebarItems: SidebarItem[] = [
     { id: 'home', label: 'Home', icon: Home, path: '/home' },
@@ -69,9 +72,11 @@ const NavBarM = () => {
           <button className="p-2 rounded-lg hover:bg-gray-800 transition-colors">
             <Search className="w-5 h-5" />
           </button>
-          <button className="p-2 rounded-lg hover:bg-gray-800 transition-colors">
-            <Bell className="w-5 h-5" />
-          </button>
+ <button onClick={() => setNotifOpen(true)} className="text-white hover:text-blue-400">
+  <Bell className="w-5 h-5" />
+</button>
+<NotificationModal isOpen={isNotifOpen} onClose={() => setNotifOpen(false)} />
+
         </div>
       </div>
 

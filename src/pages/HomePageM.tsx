@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Upload, Home, User, LogOut, Music, Calendar, CheckCircle, Clock, AlertCircle, Menu, X, Activity, Zap, TrendingUp, Plus, Search, Bell, Folder, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import NavBarM from './NavBarM';
+import { supabase } from '../lib/supabaseClient';
 
 type TrackStatus = 'processed' | 'processing' | 'failed';
 
@@ -23,43 +24,48 @@ const HomePageM = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [hoveredOption, setHoveredOption] = useState<string | null>(null);
-  const [tracks] = useState<Track[]>([
-    {
-      id: 1,
-      name: "Summer Vibes.mp3",
-      date: "2024-06-14",
-      status: "processed",
-      size: "3.2 MB"
-    },
-    {
-      id: 2,
-      name: "Midnight Jazz.wav",
-      date: "2024-06-13",
-      status: "processing",
-      size: "12.8 MB"
-    },
-    {
-      id: 3,
-      name: "Electronic Dreams.mp3",
-      date: "2024-06-12",
-      status: "processed",
-      size: "4.1 MB"
-    },
-    {
-      id: 4,
-      name: "Acoustic Session.wav",
-      date: "2024-06-11",
-      status: "failed",
-      size: "8.9 MB"
-    },
-    {
-      id: 5,
-      name: "Hip Hop Beat.mp3",
-      date: "2024-06-10",
-      status: "processed",
-      size: "2.7 MB"
-    }
-  ]);
+  const [tracks, setTracks] = useState<Track[]>([]);
+
+  useEffect(() => {
+    const fetchTracks = async () => {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+
+      if (error || !session?.user) {
+        console.error('Not authenticated');
+        return;
+      }
+
+      const userId = session.user.id;
+      const accessToken = session.access_token;
+
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/sessions/all-user-tracks/${userId}`, {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+        });
+
+        const data = await res.json();
+
+        const formattedTracks = data.map((track: any) => ({
+          id: track.id,
+          name: track.title || track.filename || 'Untitled',
+          date: new Date(track.created_at).toISOString().slice(0, 10),
+          status: track.status || 'processed',
+          size: track.size || '3.0 MB',
+        }));
+
+        setTracks(formattedTracks);
+      } catch (err) {
+        console.error('Error loading tracks:', err);
+      }
+    };
+
+    fetchTracks();
+  }, []);
 
   const toggleModal = () => {
     setIsModalOpen(!isModalOpen);
@@ -93,7 +99,6 @@ const HomePageM = () => {
 
   return (
     <div className="min-h-screen bg-black text-white">
-
       <NavBarM />
       {/* Main Content */}
       <div className="p-4 space-y-6">
@@ -158,7 +163,16 @@ const HomePageM = () => {
               </div>
             </button>
 
-            <button className="w-full p-4 rounded-xl border border-gray-800 hover:scale-[0.98] transition-all duration-200 text-left flex items-center space-x-4" style={{ backgroundColor: '#3b19e6' }}>
+            <button 
+              onClick={() => {
+                const element = document.getElementById('recent-tracks');
+                if (element) {
+                  element.scrollIntoView({ behavior: 'smooth' });
+                }
+              }}
+              className="w-full p-4 rounded-xl border border-gray-800 hover:scale-[0.98] transition-all duration-200 text-left flex items-center space-x-4" 
+              style={{ backgroundColor: '#3b19e6' }}
+            >
               <div className="w-12 h-12 bg-white/10 rounded-full flex items-center justify-center">
                 <Activity className="w-6 h-6 text-white" />
               </div>
@@ -181,7 +195,7 @@ const HomePageM = () => {
         </div>
 
         {/* Recent Tracks - Mobile Card Layout */}
-        <div>
+        <div id="recent-tracks">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold">Recent Tracks</h3>
             <button className="text-sm text-blue-400 font-medium">View All</button>
