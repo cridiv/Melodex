@@ -6,6 +6,7 @@ import {
 import { Link, useParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { FaSpotify, FaYoutube } from 'react-icons/fa';
+import { toast } from 'react-toastify';
 
 interface Track {
   id: string;
@@ -128,86 +129,61 @@ const SessionDetail: React.FC = () => {
     }
   };
 
-const handleGenerateLyrics = async (track: Track) => {
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
-    if (!token) throw new Error('No token found');
+  const handleGenerateLyrics = async (track: Track) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error('No authentication token found');
 
-    // Show loading state
-    setTracks(prev => prev.map(t => 
-      t.id === track.id ? { ...t, status: 'processing' } : t
-    ));
+      // Set loading state
+      setTracks(prev => prev.map(t => 
+        t.id === track.id ? { ...t, status: 'processing' } : t
+      ));
 
-    // Call backend endpoint - note the URL change
-    const response = await fetch('http://localhost:3000/lyrics', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        title: track.title || track.filename,
-        artist: track.artist || ''
-      })
-    });
-
-    // Handle non-JSON responses
-    const contentType = response.headers.get('content-type');
-    if (!contentType?.includes('application/json')) {
-      const text = await response.text();
-      throw new Error(`Unexpected response: ${text.substring(0, 100)}`);
-    }
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || 'Failed to generate lyrics');
-    }
-
-    if (!data.lyrics) {
-      throw new Error('No lyrics returned from server');
-    }
-
-    // Update track in database
-    const updateResponse = await fetch(
-      `http://localhost:3000/tracks/${track.id}`,
-      {
+      // Call backend to generate lyrics
+      const response = await fetch(`http://localhost:3000/tracks/${track.id}/generate-lyrics`, {
         method: 'PATCH',
-        headers: { 
+        headers: {
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
         },
-        body: JSON.stringify({ lyrics: data.lyrics })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`);
       }
-    );
 
-    if (!updateResponse.ok) {
-      throw new Error('Failed to update track with lyrics');
-    }
+      const updatedTrack = await response.json();
 
-    const updatedTrack = await updateResponse.json();
+      // Update track with new lyrics
+      setTracks(prev => prev.map(t => 
+        t.id === updatedTrack.id ? updatedTrack : t
+      ));
 
-    setTracks(prev =>
-      prev.map(t => t.id === updatedTrack.id ? updatedTrack : t)
-    );
-  } catch (err) {
-    console.error('Error generating lyrics:', err);
-    let errorMsg = 'Failed to generate lyrics';
-    if (err && typeof err === 'object' && 'message' in err) {
-      errorMsg = `Failed to generate lyrics: ${(err as { message: string }).message}`;
-    }
-    alert(errorMsg);
-    
-    setTracks(prev =>
-      prev.map(t => 
+      // Show success message
+      toast.success('Lyrics generated successfully!', {
+        position: 'bottom-right',
+        autoClose: 3000
+      });
+
+    } catch (error) {
+      console.error('Lyrics generation failed:', error);
+      
+      // Show error to user
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      toast.error(`Failed to generate lyrics: ${errorMessage}`, {
+        position: 'bottom-right',
+        autoClose: 5000
+      });
+
+      // Reset loading state
+      setTracks(prev => prev.map(t => 
         t.id === track.id ? { ...t, status: 'completed' } : t
-      )
-    );
-  }
-};
+      ));
+    }
+  };
 
-const handleViewLyrics = (track: Track) => {
+  const handleViewLyrics = (track: Track) => {
     setCurrentTrackTitle(track.title || track.filename);
     setCurrentTrackArtist(track.artist || '');
     setCurrentLyrics(track.lyrics || '');
@@ -323,30 +299,28 @@ const handleViewLyrics = (track: Track) => {
                   </button>
                 )}
 
-{/* Lyrics Button with proper loading states */}
-{(track.lyrics && track.lyrics.trim().length > 0) ? (
-  <button
-    onClick={() => handleViewLyrics(track)}
-    className="bg-white/10 hover:bg-white/20 backdrop-blur-lg border-0 rounded-xl px-4 py-2 text-white text-sm flex items-center gap-2 transition-all duration-300"
-  >
-    <FileText className="w-4 h-4" /> View Lyrics
-  </button>
-) : track.status === 'processing' ? (
-  <button
-    disabled
-    className="bg-white/10 backdrop-blur-lg border-0 rounded-xl px-4 py-2 text-white/60 text-sm flex items-center gap-2 cursor-not-allowed"
-  >
-    <Loader className="w-4 h-4 animate-spin" /> Generating...
-  </button>
-) : (
-  <button
-    onClick={() => handleGenerateLyrics(track)}
-    className="bg-white/10 hover:bg-[#3b19e6]/30 backdrop-blur-lg border-0 rounded-xl px-4 py-2 text-white text-sm flex items-center gap-2 transition-all duration-300"
-  >
-    <FileText className="w-4 h-4" /> Generate Lyrics
-  </button>
-)}
-
+                {(track.lyrics && track.lyrics.trim().length > 0) ? (
+                  <button
+                    onClick={() => handleViewLyrics(track)}
+                    className="bg-white/10 hover:bg-white/20 backdrop-blur-lg border-0 rounded-xl px-4 py-2 text-white text-sm flex items-center gap-2 transition-all duration-300"
+                  >
+                    <FileText className="w-4 h-4" /> View Lyrics
+                  </button>
+                ) : track.status === 'processing' ? (
+                  <button
+                    disabled
+                    className="bg-white/10 backdrop-blur-lg border-0 rounded-xl px-4 py-2 text-white/60 text-sm flex items-center gap-2 cursor-not-allowed"
+                  >
+                    <Loader className="w-4 h-4 animate-spin" /> Generating...
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleGenerateLyrics(track)}
+                    className="bg-white/10 hover:bg-[#3b19e6]/30 backdrop-blur-lg border-0 rounded-xl px-4 py-2 text-white text-sm flex items-center gap-2 transition-all duration-300"
+                  >
+                    <FileText className="w-4 h-4" /> Generate Lyrics
+                  </button>
+                )}
               </div>
             </div>
           ))}

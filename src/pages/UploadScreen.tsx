@@ -175,7 +175,7 @@ const handleUploadResponse = (responseData: any) => {
         fileType: metadata.fileType,
       };
 
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/tracks/save-to-session`, {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/sessions/save-track`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -408,7 +408,6 @@ const handleUploadResponse = (responseData: any) => {
     }}
   />
 )}
-
 
         <TrackModalManager />
 

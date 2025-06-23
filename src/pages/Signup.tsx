@@ -95,6 +95,7 @@ try {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#000] relative overflow-hidden">
       {/* Floating background elements */}
+            
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {['♪', '♫', '♪', '♬'].map((note, index) => (
           <div

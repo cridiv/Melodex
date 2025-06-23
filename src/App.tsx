@@ -9,6 +9,7 @@ import SessionDetail from "./pages/SessionDetails";
 import Profile from "./pages/Profile";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LyricsModal from "./components/LyricsModal";
+import AuthCallback from "./pages/AuthCallback";
 
 function App() {
   return (
@@ -27,6 +28,8 @@ function App() {
               <Signin />
           }
         />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+
         <Route
           path="/signup"
           element={
